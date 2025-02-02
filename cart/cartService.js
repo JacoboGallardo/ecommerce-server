@@ -1,4 +1,5 @@
 const guid = require('guid');
+const path = require('path');
 const { queryDb } = require('../data-access/dataAccessService')
 
 const addItemToCart = async (userId, productId, quantity) => {
@@ -58,10 +59,16 @@ const getCart = async (userId) => {
         [cartId]
     );
 
-    const totalQuantity = productsInCart.reduce((total, item) => total + item.quantity, 0);
+    const baseURL = "http://localhost:4000";
+    const updatedProducts = productsInCart.map((product) => ({
+        ...product,
+        image_url: `${baseURL}/public/images/${path.basename(product.image_url)}`,
+    }));
+
+    const totalQuantity = updatedProducts.reduce((total, item) => total + item.quantity, 0);
 
     const cart = {
-        productsInCart,
+        productsInCart: updatedProducts,
         cartTotalPrice: cartPrice[0].total_price,
         cartId,
         totalQuantity
