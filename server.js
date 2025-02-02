@@ -1,35 +1,20 @@
 const express = require("express");
 const bodyParser = require("body-parser");
 const jwt = require("jwt-simple");
-const mysql = require("mysql2/promise");
 const path = require('path');
 const cors = require('cors');
 const guid = require('guid');
+const { queryDb } = require('./data-access/dataAccessService');
+const { getProducts } = require("./products/productsService");
+const { getCategories } = require("./categories/categoriesService");
 
 
-
-// Initialize Express app
 const app = express();
-app.use(cors());
-// Middleware to parse JSON bodies
-app.use(bodyParser.json());
 
-// Serve static files (images) from the 'public' directory
+app.use(cors());
+app.use(bodyParser.json());
 app.use('/public', express.static(path.join(__dirname, 'public')));
 
-const pool = mysql.createPool({
-  host: "localhost",
-  user: "callile",
-  password: "toor", // Replace with your MySQL password
-  database: "Tienda_Calile", // Replace with your database name
-});
-
-
-// Function to query the database
-const queryDb = async (query, params) => {
-  const [rows] = await pool.execute(query, params); // Execute query and get the result rows
-  return rows;
-};
 
 app.get("/api/products", async (req, res) => {
   console.log("Getting all products")
@@ -40,16 +25,7 @@ app.get("/api/products", async (req, res) => {
 
   try {
     console.log("Category id is", categoryId)
-    const query = "SELECT * FROM products WHERE category_id = ?";
-    const results = await queryDb(query, [categoryId]);
-
-    console.log("Results are", results)
-    // Aquí agregamos la baseURL y modificamos la URL de las imágenes
-    const baseURL = "http://localhost:4000"; // Tu baseURL
-    const updatedProducts = results.map((product) => ({
-      ...product,
-      image_url: `${baseURL}/public/images/${path.basename(product.image_url)}`, // Modificamos la URL de la imagen
-    }));
+    const updatedProducts = await getProducts(categoryId)
 
     res.json(updatedProducts);
   } catch (err) {
@@ -58,12 +34,9 @@ app.get("/api/products", async (req, res) => {
   }
 });
 
-
-// Endpoint: Get all categories
 app.get("/api/categories", async (req, res) => {
   try {
-    const query = "SELECT * FROM categories";
-    const results = await queryDb(query);
+    const results = await getCategories()
     res.json(results);
   } catch (err) {
     console.error("Error fetching categories:", err);
