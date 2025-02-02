@@ -16,6 +16,10 @@ const addItemToCart = async (userId, productId, quantity) => {
         console.log("Cart exists with id", cartId);
     }
 
+    const currentCartItemsQty = "SELECT * FROM cart_products WHERE cart_id = ?"
+    const cartProducts = await queryDb(currentCartItemsQty, [cartId]);
+    const totalQuantity = cartProducts.reduce((total, item) => total + item.quantity, 0);
+
     const checkQuery = "SELECT * FROM cart_products WHERE cart_id = ? AND product_id = ?";
     const cartItemCheck = await queryDb(checkQuery, [cartId, productId]);
 
@@ -25,7 +29,7 @@ const addItemToCart = async (userId, productId, quantity) => {
         const itemId = cartItemCheck[0].id;
         await queryDb("UPDATE cart_products SET quantity = ? WHERE id = ?", [newQuantity, itemId]);
         console.log(`Item updated with new quantity: ${newQuantity}`);
-        return { cartItemId: itemId, newQuantity }
+        return { cartItemId: itemId, newQuantity, newTotalQuantity: totalQuantity + quantity }
     }
 
     const itemId = guid.create().toString();
@@ -36,7 +40,7 @@ const addItemToCart = async (userId, productId, quantity) => {
         quantity,
     ]);
     console.log("Item did not exist in cart, added new item", itemId);
-    return { cartItemId: itemId, newQuantity: 1 }
+    return { cartItemId: itemId, newQuantity: 1, newTotalQuantity: totalQuantity + 1 }
 }
 
 const getCart = async (userId) => {
@@ -54,10 +58,13 @@ const getCart = async (userId) => {
         [cartId]
     );
 
+    const totalQuantity = productsInCart.reduce((total, item) => total + item.quantity, 0);
+
     const cart = {
         productsInCart,
         cartTotalPrice: cartPrice[0].total_price,
         cartId,
+        totalQuantity
     };
 
     return cart;
