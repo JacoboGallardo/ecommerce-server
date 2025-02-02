@@ -7,7 +7,7 @@ const { queryDb } = require('./data-access/dataAccessService');
 const { getProducts } = require("./products/productsService");
 const { getCategories } = require("./categories/categoriesService");
 const { loginUser } = require('./login/loginService');
-const { getCart, addItemToCart } = require('./cart/cartService')
+const { getCart, addItemToCart, removeItemFromCart, checkoutCart } = require('./cart/cartService')
 
 const app = express();
 
@@ -94,24 +94,17 @@ app.post("/api/cart/remove-item", async (req, res) => {
   const { product_id, cart_id } = req.body;
 
   try {
-    const checkQuery = "SELECT * FROM cart_products WHERE cart_id = ? AND product_id = ?";
-    const cartItemCheck = await queryDb(checkQuery, [cart_id, product_id]);
+    const newItemQuantity = await removeItemFromCart({ cartId: cart_id, productId: product_id })
 
-    if (!cartItemCheck) {
+    if (!newItemQuantity) {
       return res.status(404).json({ error: "Item not found in cart" });
     }
 
-    if (cartItemCheck[0].quantity >= 2) {
-      console.log(`Cart item in cart ${cart_id} with product_id ${product_id} exists, removing one`);
-      const newQuantity = cartItemCheck[0].quantity - 1;
-      const itemId = cartItemCheck[0].id;
-      await queryDb("UPDATE cart_products SET quantity = ? WHERE id = ?", [newQuantity, itemId]);
-      console.log(`Item updated with new quantity: ${newQuantity}`);
-      res.json({ message: "Cart item updated", newQuantity });
-    } else {
-      await queryDb("DELETE FROM cart_products WHERE cart_id = ? AND product_id = ?", [cart_id, product_id]);
-      res.json({ message: "Item removed from cart" });
+    if (newItemQuantity === 0) {
+      return res.json({ message: "Cart item removed", newQuantity });
     }
+
+    return res.json({ message: "Cart item updated", newQuantity });
   } catch (err) {
     console.error("Error removing item from cart:", err);
     res.status(500).json({ error: "Failed to remove item from cart" });
@@ -119,14 +112,11 @@ app.post("/api/cart/remove-item", async (req, res) => {
 });
 
 app.post("/api/cart/checkout", async (req, res) => {
-  const { user_id, payment_method } = req.body;
+  const { user_id } = req.body;
+  const userId = user_id;
+
   try {
-    // Replace 100.00 with the calculated total from cart items
-    await queryDb("INSERT INTO orders (user_id, payment_method, total_amount) VALUES (?, ?, ?)", [
-      user_id,
-      payment_method,
-      100.0,
-    ]);
+    await checkoutCart(userId);
     res.json({ message: "Checkout successful" });
   } catch (err) {
     console.error("Error during checkout:", err);

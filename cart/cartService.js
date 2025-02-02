@@ -44,6 +44,30 @@ const addItemToCart = async (userId, productId, quantity) => {
     return { cartItemId: itemId, newQuantity: 1, newTotalQuantity: totalQuantity + 1 }
 }
 
+const removeItemFromCart = async ({ cartId, productId }) => {
+    const checkQuery = "SELECT * FROM cart_products WHERE cart_id = ? AND product_id = ?";
+    const cartItemCheck = await queryDb(checkQuery, [cartId, productId]);
+
+    if (!cartItemCheck) {
+        return undefined;
+    }
+
+    if (cartItemCheck[0].quantity >= 2) {
+        console.log(`Cart item in cart ${cartId} with product_id ${productId} exists, removing one`);
+        const newQuantity = cartItemCheck[0].quantity - 1;
+        const itemId = cartItemCheck[0].id;
+        await queryDb("UPDATE cart_products SET quantity = ? WHERE id = ?", [newQuantity, itemId]);
+        console.log(`Item updated with new quantity: ${newQuantity}`);
+        return newQuantity;
+    }
+
+
+    await queryDb("DELETE FROM cart_products WHERE cart_id = ? AND product_id = ?", [cartId, productId]);
+    console.log('Item removed from cart completely')
+    return 0;
+
+}
+
 const getCart = async (userId) => {
     const query = "SELECT * FROM carts WHERE user_id = ?";
     const results = await queryDb(query, [userId]);
@@ -77,4 +101,51 @@ const getCart = async (userId) => {
     return cart;
 }
 
-module.exports = { getCart, addItemToCart }
+const checkoutCart = async (userId) => {
+    const cart = await getCart(userId);
+
+    const { totalQuantity, productsInCart } = cart;
+
+    console.log("Cart is", cart);
+
+    const orderId = guid.create().toString();
+    const cartId = cart.cartId;
+
+    console.log("About to insert into orders", { orderId: orderId.toString(), userId, totalQuantity })
+
+    await queryDb("INSERT INTO orders (id, user_id, total, creation_date) VALUES (?, ?, ?, NOW())", [
+        orderId,
+        userId,
+        totalQuantity,
+    ]);
+
+    console.log('Order table updated')
+
+    for (const productInCart of productsInCart) {
+        const orderProductId = guid.create().toString();
+        console.log("Product in cart", {
+            id: orderProductId,
+            orderId,
+            productId: productInCart.id,
+            price: productInCart.price,
+            quantity: productInCart.quantity
+        })
+
+        await queryDb("INSERT INTO order_products (id, order_id, product_id, quantity, unit_price) VALUES (?, ?, ?, ?, ?)", [
+            orderProductId,
+            orderId,
+            productInCart.id,
+            productInCart.quantity,
+            productInCart.price
+        ]);
+    }
+
+    console.log('Order products updated in cartId', cartId);
+
+    await queryDb('DELETE FROM cart_products WHERE cart_id=?', [cartId]);
+    await queryDb('DELETE FROM carts WHERE id=?', [cartId]);
+
+    console.log('Cart emptied');
+}
+
+module.exports = { getCart, addItemToCart, removeItemFromCart, checkoutCart }
