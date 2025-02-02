@@ -1,13 +1,13 @@
 const express = require("express");
 const bodyParser = require("body-parser");
-const jwt = require("jwt-simple");
 const path = require('path');
 const cors = require('cors');
 const guid = require('guid');
 const { queryDb } = require('./data-access/dataAccessService');
 const { getProducts } = require("./products/productsService");
 const { getCategories } = require("./categories/categoriesService");
-
+const { loginUser } = require('./login/loginService');
+const { getCart, addItemToCart } = require('./cart/cartService')
 
 const app = express();
 
@@ -48,44 +48,26 @@ app.get("/api/categories", async (req, res) => {
 app.post("/api/users/login", async (req, res) => {
   const { username, password } = req.body;
   try {
-    const query = "SELECT * FROM users WHERE name = ? AND password = ?";
-    const results = await queryDb(query, [username, password]);
+    const loginResult = await loginUser(username, password)
 
-    if (results.length === 0) {
+    console.log('Login result', loginResult)
+    if (loginResult.invalid) {
       return res.status(401).json({ error: "Invalid username or password" });
     }
 
-    const user = results[0];
-    const token = jwt.encode({ userId: user.id }, "your_jwt_secret");
+    const { user, token } = loginResult;
+
     res.json({ id: user.id, name: user.name, token });
   } catch (err) {
     console.error("Error during login:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(403).json({ error: "Could not authenticate user" });
   }
 });
 
 app.get("/api/cart", async (req, res) => {
   const userId = req.query.user_id;
   try {
-    const query = "SELECT * FROM carts WHERE user_id = ?";
-    const results = await queryDb(query, [userId]);
-    const cartId = results[0].id;
-
-    const cartPrice = await queryDb(
-      "SELECT SUM(p.price * cp.quantity) AS total_price FROM cart_products cp JOIN products p ON cp.product_id = p.id WHERE cp.cart_id = ?",
-      [cartId]
-    );
-
-    const productsInCart = await queryDb(
-      "SELECT p.id, p.name, p.price, cp.quantity, p.image_url FROM cart_products cp JOIN products p ON cp.product_id = p.id WHERE cp.cart_id = ?",
-      [cartId]
-    );
-
-    const cart = {
-      productsInCart,
-      cartTotalPrice: cartPrice[0].total_price,
-      cartId,
-    };
+    const cart = await getCart(userId);
 
     res.json(cart);
   } catch (err) {
@@ -98,43 +80,10 @@ app.get("/api/cart", async (req, res) => {
 app.post("/api/cart/add-item", async (req, res) => {
   const { user_id, product_id, quantity } = req.body;
 
-  let cartId = null;
   try {
-    const query = "SELECT * FROM carts WHERE user_id = ?";
-    const results = await queryDb(query, [user_id]);
+    const { cartItemId, newQuantity } = await addItemToCart(user_id, product_id, quantity)
 
-    if (results.length === 0) {
-      console.log("Cart does not exist, creating");
-      const newId = guid.create().toString();
-      await queryDb("INSERT INTO carts (id, user_id, creation_date) VALUES (?, ?, NOW())", [newId, user_id]);
-      cartId = newId;
-    } else {
-      cartId = results[0].id;
-      console.log("Cart exists with id", cartId);
-    }
-
-    const checkQuery = "SELECT * FROM cart_products WHERE cart_id = ? AND product_id = ?";
-    const cartItemCheck = await queryDb(checkQuery, [cartId, product_id]);
-
-    if (cartItemCheck.length > 0) {
-      console.log(`Cart item in cart ${cartId} with product_id ${product_id} exists, updating`);
-      const newQuantity = cartItemCheck[0].quantity + quantity;
-      const itemId = cartItemCheck[0].id;
-      await queryDb("UPDATE cart_products SET quantity = ? WHERE id = ?", [newQuantity, itemId]);
-      console.log(`Item updated with new quantity: ${newQuantity}`);
-      res.json({ message: "Cart item updated", newQuantity });
-    } else {
-      const itemId = guid.create().toString();
-      await queryDb("INSERT INTO cart_products (id, cart_id, product_id, quantity) VALUES (?, ?, ?, ?)", [
-        itemId,
-        cartId,
-        product_id,
-        quantity,
-      ]);
-      console.log("Item did not exist in cart, added new item", itemId);
-
-      res.json({ message: "Item added to cart", itemId });
-    }
+    res.json({ message: "Cart item added to cart", cartItemId, newQuantity });
   } catch (err) {
     console.error("Error adding item to cart:", err);
     res.status(500).json({ error: "Failed to add item to cart" });
