@@ -14,8 +14,6 @@ const getOrderHistory = async (userId) => {
 
     const orderIds = orders.map(order => order.id);
 
-    console.log('Order IDs', orderIds)
-
     // Step 2: Get all order items for those orders
     const query = `SELECT order_id, product_id, quantity, unit_price 
     FROM order_products 
