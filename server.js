@@ -2,10 +2,9 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const path = require('path');
 const cors = require('cors');
-const guid = require('guid');
-const { queryDb } = require('./data-access/dataAccessService');
 const { getProducts } = require("./products/productsService");
 const { getCategories } = require("./categories/categoriesService");
+const { getOrderHistory } = require("./order-history/orderService")
 const { loginUser } = require('./login/loginService');
 const { getCart, addItemToCart, removeItemFromCart, checkoutCart } = require('./cart/cartService')
 
@@ -127,8 +126,7 @@ app.post("/api/cart/checkout", async (req, res) => {
 app.get("/api/orders", async (req, res) => {
   const userId = req.query.user_id;
   try {
-    const query = "SELECT * FROM orders WHERE user_id = ?";
-    const results = await queryDb(query, [userId]);
+    const results = await getOrderHistory(userId)
     res.json(results);
   } catch (err) {
     console.error("Error fetching orders:", err);
