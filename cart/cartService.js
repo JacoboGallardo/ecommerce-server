@@ -71,6 +71,10 @@ const removeItemFromCart = async ({ cartId, productId }) => {
 const getCart = async (userId) => {
     const query = "SELECT * FROM carts WHERE user_id = ?";
     const results = await queryDb(query, [userId]);
+    if (results.length === 0) {
+        return {}
+    }
+
     const cartId = results[0].id;
 
     const cartPrice = await queryDb(
