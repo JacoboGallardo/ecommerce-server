@@ -8,7 +8,6 @@ const getOrderHistory = async (userId) => {
     );
 
     if (orders.length === 0) {
-        await connection.end();
         return []; // No orders found for the user
     }
 
